@@ -7,3 +7,4 @@ edition = "2021"
 exempi2 = "0.2.0"
 chrono = "0.4.39"
 iced = { version = "0.13.1", features = [ "image" ] }
+allmytoes = "0.4.0"
