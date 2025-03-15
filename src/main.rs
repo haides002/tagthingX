@@ -4,7 +4,8 @@ mod file;
 fn main() {
     println!("Hello, world!");
 
-    dbg!(crate::file::File::new(
-        std::path::PathBuf::from_str(std::env::args().nth(1).unwrap().as_str()).unwrap(),
-    ));
+    let path = std::path::PathBuf::from_str(std::env::args().nth(1).unwrap().as_str()).unwrap();
+
+    dbg!(crate::file::File::read_directory(path));
+    //dbg!(crate::file::File::new(path.clone()));
 }

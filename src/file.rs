@@ -1,33 +1,36 @@
+use chrono::NaiveDateTime;
+
 #[derive(Debug)]
 pub struct File {
     path: std::path::PathBuf,
-    tags: Vec<String>,
-    date: Option<chrono::DateTime<chrono::FixedOffset>>,
-    thumbnail_path: std::path::PathBuf,
+    tags: Option<Vec<String>>,
+    date: Option<chrono::NaiveDateTime>,
+    thumbnail_path: Option<std::path::PathBuf>,
 }
 
 impl File {
     pub fn new(path: std::path::PathBuf) -> Self {
         use allmytoes::*;
-        use chrono::{DateTime, FixedOffset};
-        use exempi2::{OpenFlags, PropFlags, Xmp, XmpFile};
+        use exempi2::{OpenFlags, PropFlags, Xmp, XmpFile, XmpString};
         use std::path::PathBuf;
 
         const THUMBNAIL_SIZE: ThumbSize = ThumbSize::Large;
+
         const EXIF_SCHEMA: &str = "http://ns.adobe.com/exif/1.0/";
-        const XMP_SCHEMA: &str = "http://ns.adobe.com/xap/1.0/";
         const DUBLIN_CORE_SCHEMA: &str = "http://purl.org/dc/elements/1.1/";
 
-        let xmp: Xmp = XmpFile::new_from_file(&path, OpenFlags::ONLY_XMP)
+        println!("reading file {}", path.to_str().unwrap());
+
+        let xmp: Option<Xmp> = XmpFile::new_from_file(&path, OpenFlags::ONLY_XMP)
             .expect("failed to read file")
             .get_new_xmp()
-            .expect("failed to read XMP");
+            .ok();
 
-        let tags: Vec<String> = {
+        let tags = || -> Option<Vec<String>> {
             let mut tags: Vec<String> = Vec::new();
 
             for i in 1.. {
-                match xmp.get_array_item(
+                match xmp.clone()?.get_array_item(
                     DUBLIN_CORE_SCHEMA,
                     "dc:subject",
                     i,
@@ -38,24 +41,33 @@ impl File {
                 }
             }
 
-            tags
-        };
+            Some(tags)
+        }();
 
-        let date: Option<DateTime<FixedOffset>> = {
-            let exif_date =
-                xmp.get_property(EXIF_SCHEMA, "DateTimeOriginal", &mut PropFlags::empty());
+        let date = || -> Option<NaiveDateTime> {
+            let formats: Vec<&str> = vec!["%+", "%FT%T", "%FT%T%.f"];
 
-            match exif_date {
-                Ok(date) => Some(
-                    DateTime::parse_from_str(date.to_str().unwrap(), "%+")
-                        .expect("could not parse date"),
-                ),
-                Err(_) => None,
+            let exif_date: Result<XmpString, exempi2::Error> =
+                xmp.clone()?
+                    .get_property(EXIF_SCHEMA, "DateTimeOriginal", &mut PropFlags::empty());
+
+            let date = exif_date.ok()?;
+
+            match formats
+                .iter()
+                .map(|format: &&str| -> Result<NaiveDateTime, _> {
+                    chrono::NaiveDateTime::parse_from_str(date.to_str().unwrap(), *format)
+                })
+                .filter(|result| -> bool { result.is_ok() })
+                .nth(0)
+            {
+                Some(date) => Some(date.unwrap()),
+                None => panic!("unknown date format for date: {}", date.to_str().unwrap()),
             }
-        };
+        }();
 
-        let thumbnail_path: PathBuf = {
-            let config: AMTConfiguration = AMTConfiguration {
+        let thumbnail_path = || -> Option<PathBuf> {
+            let config = AMTConfiguration {
                 force_creation: false,
                 return_smallest_feasible: false,
                 leak: false,
@@ -63,13 +75,10 @@ impl File {
                 force_inbuilt_provider_spec: false,
             };
 
-            PathBuf::from(
-                AMT::new(&config)
-                    .get(&path, THUMBNAIL_SIZE)
-                    .expect("failed to generate thumbnail")
-                    .path,
-            )
-        };
+            Some(PathBuf::from(
+                AMT::new(&config).get(&path, THUMBNAIL_SIZE).ok()?.path,
+            ))
+        }();
 
         File {
             path,
@@ -77,5 +86,25 @@ impl File {
             date,
             thumbnail_path,
         }
+    }
+
+    pub fn read_directory(path: std::path::PathBuf) -> Vec<Self> {
+        use std::path::PathBuf;
+        let mut files: Vec<Self> = Vec::new();
+
+        for entry in std::fs::read_dir(path).expect("failed to read directory") {
+            let path: PathBuf = entry.unwrap().path();
+
+            if path.is_dir() {
+                dbg!(Self::read_directory(path));
+            } else if path.is_file() {
+                files.push(Self::new(path));
+            } else {
+                // its likely a symlink these are not handled yet
+                todo!();
+            }
+        }
+
+        files
     }
 }
