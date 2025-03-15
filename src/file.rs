@@ -1,11 +1,11 @@
 use chrono::NaiveDateTime;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct File {
-    path: std::path::PathBuf,
-    tags: Option<Vec<String>>,
-    date: Option<chrono::NaiveDateTime>,
-    thumbnail_path: Option<std::path::PathBuf>,
+    pub path: std::path::PathBuf,
+    pub tags: Option<Vec<String>>,
+    pub date: Option<chrono::NaiveDateTime>,
+    pub thumbnail_path: Option<std::path::PathBuf>,
 }
 
 impl File {
@@ -96,7 +96,7 @@ impl File {
             let path: PathBuf = entry.unwrap().path();
 
             if path.is_dir() {
-                dbg!(Self::read_directory(path));
+                files.append(&mut Self::read_directory(path));
             } else if path.is_file() {
                 files.push(Self::new(path));
             } else {
