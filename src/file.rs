@@ -2,14 +2,15 @@ use chrono::NaiveDateTime;
 
 #[derive(Debug, Clone)]
 pub struct File {
-    pub path: std::path::PathBuf,
+    pub image_path: std::path::PathBuf,
+    pub image_handle: iced::widget::image::Handle,
+    pub thumbnail_handle: Option<iced::widget::image::Handle>,
     pub tags: Option<Vec<String>>,
     pub date: Option<chrono::NaiveDateTime>,
-    pub thumbnail_path: Option<std::path::PathBuf>,
 }
 
 impl File {
-    pub fn new(path: std::path::PathBuf) -> Self {
+    pub fn new(image_path: std::path::PathBuf) -> Self {
         use allmytoes::*;
         use exempi2::{OpenFlags, PropFlags, Xmp, XmpFile, XmpString};
         use std::path::PathBuf;
@@ -19,9 +20,9 @@ impl File {
         const EXIF_SCHEMA: &str = "http://ns.adobe.com/exif/1.0/";
         const DUBLIN_CORE_SCHEMA: &str = "http://purl.org/dc/elements/1.1/";
 
-        println!("reading file {}", path.to_str().unwrap());
+        println!("reading file://{}", image_path.to_str().unwrap());
 
-        let xmp: Option<Xmp> = XmpFile::new_from_file(&path, OpenFlags::ONLY_XMP)
+        let xmp: Option<Xmp> = XmpFile::new_from_file(&image_path, OpenFlags::ONLY_XMP)
             .expect("failed to read file")
             .get_new_xmp()
             .ok();
@@ -66,7 +67,7 @@ impl File {
             }
         }();
 
-        let thumbnail_path = || -> Option<PathBuf> {
+        let thumbnail_handle = || -> Option<iced::widget::image::Handle> {
             let config = AMTConfiguration {
                 force_creation: false,
                 return_smallest_feasible: false,
@@ -75,16 +76,20 @@ impl File {
                 force_inbuilt_provider_spec: false,
             };
 
-            Some(PathBuf::from(
-                AMT::new(&config).get(&path, THUMBNAIL_SIZE).ok()?.path,
+            Some(iced::widget::image::Handle::from_path(
+                AMT::new(&config)
+                    .get(&image_path, THUMBNAIL_SIZE)
+                    .ok()?
+                    .path,
             ))
         }();
 
         File {
-            path,
+            image_path: image_path.clone(),
+            image_handle: iced::widget::image::Handle::from_path(image_path),
+            thumbnail_handle,
             tags,
             date,
-            thumbnail_path,
         }
     }
 

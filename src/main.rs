@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 mod file;
 mod ui;
+
 fn main() -> iced::Result {
     println!("Hello, world!");
 

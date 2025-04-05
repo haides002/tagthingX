@@ -1,25 +1,61 @@
-use std::usize;
+use crate::file;
 
 use iced::{
-    widget::{button, column, container, image, row, scrollable, text, Column, Row},
+    widget::{button, column, combo_box, container, image, row, scrollable, text, Column, Row},
     Element, Length,
 };
-
-use crate::file;
 
 #[derive(Debug, Clone)]
 pub enum Message {
     SelectImage(usize),
     SelectTag(String),
+    AddTag(String),
 }
 
 #[derive(Debug, Default)]
 pub struct TagthingX {
     files: Vec<crate::file::File>,
     selected: usize,
+    image_selected: Option<image::Handle>,
+    tag_search: combo_box::State<String>,
 }
 
 impl TagthingX {
+    pub fn update(&mut self, message: Message) {
+        match message {
+            Message::SelectImage(id) => {
+                self.selected = id;
+                self.image_selected =
+                    Some(image::Handle::from_path(self.files[id].image_path.clone()))
+            }
+            Message::SelectTag(_) => {}
+            Message::AddTag(_) => {}
+        }
+    }
+
+    pub fn new(files: Vec<file::File>) -> Self {
+        Self {
+            files: files.clone(),
+            tag_search: combo_box::State::new({
+                let mut cache: Vec<String> = Vec::new();
+
+                for file in files {
+                    match file.tags {
+                        Some(tags) => cache.append(&mut tags.clone()),
+                        None => {}
+                    }
+                }
+
+                cache.sort();
+                cache.dedup();
+
+                cache
+            }),
+
+            ..Default::default()
+        }
+    }
+
     pub fn view(&self) -> Element<Message> {
         let filter_view = { container(column![]) };
 
@@ -32,10 +68,8 @@ impl TagthingX {
 
                 for (i, file) in self.files.iter().enumerate() {
                     image_row = image_row.push(
-                        button(match &file.thumbnail_path.clone() {
-                            Some(image_path) => {
-                                container(image(image_path.clone().into_os_string()))
-                            }
+                        button(match &file.thumbnail_handle.clone() {
+                            Some(handle) => container(image(handle)),
                             None => container(text!("could not find thumbnail")),
                         })
                         .width(Length::Fill)
@@ -53,16 +87,25 @@ impl TagthingX {
         };
 
         let details_view = container(scrollable(column![
-            image(self.files[self.selected].path.clone().into_os_string()),
+            image(self.files[self.selected].image_handle.clone()),
             row![{
-                let mut tags = Row::new();
+                let mut tag_buttons = Row::new();
 
-                for tag in self.files[self.selected].tags.clone().unwrap() {
-                    tags = tags.push(button(text!("{}", tag)).on_press(Message::SelectTag(tag)));
-                }
+                match self.files[self.selected].tags.clone() {
+                    Some(tags) => {
+                        for tag in tags {
+                            tag_buttons = tag_buttons
+                                .push(button(text!("{}", tag)).on_press(Message::SelectTag(tag)));
+                        }
+                    }
+                    None => {}
+                };
 
-                tags
+                tag_buttons
             }],
+            combo_box(&self.tag_search, "add tag", None, |selected| -> Message {
+                Message::AddTag(selected)
+            })
         ]));
 
         row![
@@ -71,19 +114,5 @@ impl TagthingX {
             details_view.width(Length::FillPortion(2)).padding(10)
         ]
         .into()
-    }
-
-    pub fn update(&mut self, message: Message) {
-        match message {
-            Message::SelectImage(id) => self.selected = id,
-            Message::SelectTag(_) => {}
-        }
-    }
-
-    pub fn new(files: Vec<file::File>) -> Self {
-        Self {
-            files,
-            ..Default::default()
-        }
     }
 }
